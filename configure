@@ -1,0 +1,249 @@
+#!/usr/bin/env python
+import optparse
+import os
+import pprint
+import re
+import shlex
+import subprocess
+import sys
+
+CC = os.environ.get('CC', 'cc')
+
+root_dir = os.path.dirname(__file__)
+sys.path.insert(0, os.path.join(root_dir, 'tools', 'gyp', 'pylib'))
+from gyp.common import GetFlavor
+
+# parse our options
+parser = optparse.OptionParser()
+
+# Options should be in alphabetical order but keep --prefix at the top,
+# that's arguably the one people will be looking for most.
+parser.add_option('--prefix',
+    action='store',
+    dest='prefix',
+    help='select the install prefix (defaults to /usr/local)')
+
+parser.add_option('--debug',
+    action='store_true',
+    dest='debug',
+    help='also build debug build')
+
+parser.add_option('--dest-cpu',
+    action='store',
+    dest='dest_cpu',
+    help='CPU architecture to build for. Valid values are: arm, ia32, x64')
+
+parser.add_option('--dest-os',
+    action='store',
+    dest='dest_os',
+    help='operating system to build for. Valid values are: '
+         'win, mac, solaris, freebsd, openbsd, linux, android')
+
+parser.add_option('--gdb',
+    action='store_true',
+    dest='gdb',
+    help='add gdb support')
+
+parser.add_option('--xcode',
+    action='store_true',
+    dest='use_xcode',
+    help='generate build files for use with xcode')
+
+(options, args) = parser.parse_args()
+
+
+def b(value):
+  """Returns the string 'true' if value is truthy, 'false' otherwise."""
+  if value:
+    return 'true'
+  else:
+    return 'false'
+
+
+def pkg_config(pkg):
+  cmd = os.popen('pkg-config --libs %s' % pkg, 'r')
+  libs = cmd.readline().strip()
+  ret = cmd.close()
+  if (ret): return None
+
+  cmd = os.popen('pkg-config --cflags %s' % pkg, 'r')
+  cflags = cmd.readline().strip()
+  ret = cmd.close()
+  if (ret): return None
+
+  return (libs, cflags)
+
+
+def cc_macros():
+  """Checks predefined macros using the CC command."""
+
+  try:
+    p = subprocess.Popen(shlex.split(CC) + ['-dM', '-E', '-'],
+                         stdin=subprocess.PIPE,
+                         stdout=subprocess.PIPE,
+                         stderr=subprocess.PIPE)
+  except OSError:
+    print '''Node.js configure error: No acceptable C compiler found!
+
+        Please make sure you have a C compiler installed on your system and/or
+        consider adjusting the CC environment variable if you installed
+        it in a non-standard prefix.
+        '''
+    sys.exit()
+
+  p.stdin.write('\n')
+  out = p.communicate()[0]
+
+  out = str(out).split('\n')
+
+  k = {}
+  for line in out:
+    lst = shlex.split(line)
+    if len(lst) > 2:
+      key = lst[1]
+      val = lst[2]
+      k[key] = val
+  return k
+
+
+def host_arch_cc():
+  """Host architecture check using the CC command."""
+
+  k = cc_macros()
+
+  matchup = {
+    '__x86_64__'  : 'x64',
+    '__i386__'    : 'ia32',
+    '__arm__'     : 'arm',
+    '__mips__'    : 'mips',
+  }
+
+  rtn = 'ia32' # default
+
+  for i in matchup:
+    if i in k and k[i] != '0':
+      rtn = matchup[i]
+      break
+
+  return rtn
+
+
+def host_arch_win():
+  """Host architecture check using environ vars (better way to do this?)"""
+
+  arch = os.environ.get('PROCESSOR_ARCHITECTURE', 'x86')
+
+  matchup = {
+    'AMD64'  : 'x64',
+    'x86'    : 'ia32',
+    'arm'    : 'arm',
+    'mips'   : 'mips',
+  }
+
+  return matchup.get(arch, 'ia32')
+
+
+def compiler_version():
+  try:
+    proc = subprocess.Popen(shlex.split(CC) + ['--version'],
+                            stdout=subprocess.PIPE)
+  except WindowsError:
+    return (0, False)
+
+  is_clang = 'clang' in proc.communicate()[0].split('\n')[0]
+
+  proc = subprocess.Popen(shlex.split(CC) + ['-dumpversion'],
+                          stdout=subprocess.PIPE)
+  version = tuple(map(int, proc.communicate()[0].split('.')))
+
+  return (version, is_clang)
+
+def configure_v8(o):
+  o['variables']['v8_enable_gdbjit'] = 1 if options.gdb else 0
+  o['variables']['v8_enable_i18n_support'] = 0  # Don't require libicu.
+  o['variables']['v8_no_strict_aliasing'] = 1  # Work around compiler bugs.
+  o['variables']['v8_optimized_debug'] = 0  # Compile with -O0 in debug builds.
+  o['variables']['v8_random_seed'] = 0  # Use a random seed for hash tables.
+
+def configure_node(o):
+  if options.dest_os == 'android':
+    o['variables']['OS'] = 'android'
+  o['default_configuration'] = 'Debug' if options.debug else 'Release'
+
+  host_arch = host_arch_win() if os.name == 'nt' else host_arch_cc()
+  target_arch = options.dest_cpu or host_arch
+  o['variables']['host_arch'] = host_arch
+  o['variables']['target_arch'] = target_arch
+
+  if target_arch == 'arm':
+    configure_arm(o)
+
+  cc_version, is_clang = compiler_version()
+  o['variables']['clang'] = 1 if is_clang else 0
+
+  if not is_clang and cc_version != 0:
+    o['variables']['gcc_version'] = 10 * cc_version[0] + cc_version[1]
+
+  # clang has always supported -fvisibility=hidden, right?
+  if not is_clang and cc_version < (4,0,0):
+    o['variables']['visibility'] = ''
+
+# determine the "flavor" (operating system) we're building for,
+# leveraging gyp's GetFlavor function
+flavor_params = {}
+if (options.dest_os):
+  flavor_params['flavor'] = options.dest_os
+flavor = GetFlavor(flavor_params)
+
+output = {
+  'variables': { 'python': sys.executable },
+  'include_dirs': [],
+  'libraries': [],
+  'defines': [],
+  'cflags': [],
+}
+
+configure_node(output)
+configure_v8(output)
+
+# variables should be a root level element,
+# move everything else to target_defaults
+variables = output['variables']
+del output['variables']
+output = {
+  'variables': variables,
+  'target_defaults': output
+}
+pprint.pprint(output, indent=2)
+
+def write(filename, data):
+  filename = os.path.join(root_dir, filename)
+  print 'creating ', filename
+  f = open(filename, 'w+')
+  f.write(data)
+
+write('config.gypi', '# Do not edit. Generated by the configure script.\n' +
+      pprint.pformat(output, indent=2) + '\n')
+
+config = {
+  'BUILDTYPE': 'Debug' if options.debug else 'Release',
+  'USE_XCODE': str(int(options.use_xcode or 0)),
+  'PYTHON': sys.executable,
+}
+
+if options.prefix:
+  config['PREFIX'] = options.prefix
+
+config = '\n'.join(map('='.join, config.iteritems())) + '\n'
+
+write('config.mk',
+      '# Do not edit. Generated by the configure script.\n' + config)
+
+if options.use_xcode:
+  gyp_args = ['-f', 'xcode']
+elif flavor == 'win':
+  gyp_args = ['-f', 'msvs', '-G', 'msvs_version=auto']
+else:
+  gyp_args = ['-f', 'make-' + flavor]
+
+subprocess.call([sys.executable, 'tools/run_gyp.py'] + gyp_args)

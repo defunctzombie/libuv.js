@@ -1,0 +1,6 @@
+[submodule "vendor/uv"]
+	path = vendor/uv
+	url = https://github.com/joyent/libuv.git
+[submodule "vendor/v8"]
+	path = vendor/v8
+	url = https://github.com/v8/v8.git
