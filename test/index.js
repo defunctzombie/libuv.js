@@ -10,6 +10,11 @@ test('version', function() {
     assert.ok(typeof uv.version_string() === 'string');
 });
 
+test('now', function() {
+    var now = uv.now(uv.default_loop());
+    assert(now > 0);
+});
+
 test('enums', function() {
     assert(uv.UV_RUN_DEFAULT === 0);
     assert(uv.UV_RUN_ONCE === 1);

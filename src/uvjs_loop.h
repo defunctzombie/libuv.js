@@ -108,5 +108,15 @@ void backend_timeout(const v8::FunctionCallbackInfo<v8::Value>& args) {
     args.GetReturnValue().Set(v8::Integer::New(timeout));
 }
 
+void now(const v8::FunctionCallbackInfo<v8::Value>& args) {
+    v8::HandleScope handle_scope(args.GetIsolate());
+    assert(args.Length() == 1);
+
+    // we don't have a good way to create 64bit numbers in js
+    // so for now we will just cast this to double
+    const uint64_t now = uv_now(UnwrapLoop(args[0]));
+    args.GetReturnValue().Set(v8::Number::New(static_cast<double>(now)));
+}
+
 } // namespace detail
 } // namespace uvjs

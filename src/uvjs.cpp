@@ -30,6 +30,7 @@ v8::Handle<v8::ObjectTemplate> New() {
     PROP(update_time);
     PROP(backend_fd);
     PROP(backend_timeout);
+    PROP(now);
 
     // buffer
     PROP(buf_init);
