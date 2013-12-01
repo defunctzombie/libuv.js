@@ -1,6 +1,8 @@
 #pragma once
 
 #include <assert.h>
+#include <stdlib.h>
+
 #include <uv.h>
 
 namespace uvjs {
