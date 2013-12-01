@@ -1,4 +1,4 @@
-# libuv.js
+# libuv.js [![Build Status](https://travis-ci.org/defunctzombie/libuv.js.png?branch=master)](https://travis-ci.org/defunctzombie/libuv.js)
 
 v8 bindings for libuv. Mad science and experimentation.
 
