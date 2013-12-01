@@ -24,6 +24,7 @@ test('enums', function() {
     assert(uv.UV_JOIN_GROUP === 1);
 });
 
+require('./stream');
 require('./fs');
 
 // launch our loop, without this some tests won't run

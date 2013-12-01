@@ -3,6 +3,7 @@
 #include "uvjs.h"
 #include "uvjs_misc.h"
 #include "uvjs_loop.h"
+#include "uvjs_stream.h"
 #include "uvjs_buf.h"
 #include "uvjs_fs.h"
 
@@ -31,6 +32,12 @@ v8::Handle<v8::ObjectTemplate> New() {
     PROP(backend_fd);
     PROP(backend_timeout);
     PROP(now);
+
+    // stream
+    PROP(__stream_new);
+    PROP(listen);
+    PROP(tcp_init);
+    PROP(close);
 
     // buffer
     PROP(buf_init);
