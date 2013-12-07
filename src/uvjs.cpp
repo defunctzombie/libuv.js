@@ -6,6 +6,7 @@
 #include "uvjs_stream.h"
 #include "uvjs_buf.h"
 #include "uvjs_fs.h"
+#include "uvjs_timer.h"
 
 namespace uvjs {
 
@@ -32,6 +33,9 @@ v8::Handle<v8::ObjectTemplate> New() {
     PROP(backend_fd);
     PROP(backend_timeout);
     PROP(now);
+
+    // timers
+    PROP(timer_init);
 
     // stream
     PROP(__stream_new);

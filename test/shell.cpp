@@ -47,12 +47,15 @@ int main(int argc, char* argv[]) {
     result = RunMain(isolate, argc, argv);
     if (run_shell) RunShell(context);
 
+    // force garbage collection on exit
+    while(!v8::V8::IdleNotification()) {};
+
     context->Exit();
   }
+
   v8::V8::Dispose();
   return result;
 }
-
 
 // Extracts a C string from a V8 Utf8Value.
 const char* ToCString(const v8::String::Utf8Value& value) {

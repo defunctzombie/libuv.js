@@ -12,10 +12,13 @@ PREFIX ?= /usr/local
 V ?= 1
 
 all: out/Makefile
-	$(MAKE) -C out BUILDTYPE=Release V=$(V)
+	$(MAKE) -C out BUILDTYPE=Debug V=$(V)
 
 test: all
-	cd test && ../out/Release/uvjs --expose-gc index.js
+	cd test && ../out/Debug/uvjs --expose-gc index.js
+
+coro: all
+	cd test && ../out/Debug/uvjs --harmony coro.js
 
 out/Makefile: common.gypi vendor/uv/uv.gyp vendor/v8/build/toolchain.gypi vendor/v8/build/features.gypi vendor/v8/tools/gyp/v8.gyp config.gypi uvjs.gyp
 	$(PYTHON) tools/run_gyp.py -f make
