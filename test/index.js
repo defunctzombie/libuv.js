@@ -5,10 +5,10 @@ var test = require('./support/test');
 var assert = require('./support/assert');
 var uv = require('./support/uv');
 
-require('./misc');
-require('./timer');
-//require('./fs');
-require('./stream');
+//require('./misc');
+//require('./timer');
+require('./fs');
+//require('./stream');
 
 // launch our loop, without this some tests won't run
 var loop = uv.default_loop();

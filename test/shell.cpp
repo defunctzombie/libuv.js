@@ -26,12 +26,35 @@ v8::Handle<v8::String> ReadFile(const char* name);
 
 void ReportException(v8::Isolate* isolate, v8::TryCatch* handler);
 
+class Allocator : public v8::ArrayBuffer::Allocator {
+public:
+  Allocator() {}
+
+  void* Allocate(size_t len) {
+    return calloc(len, 1);
+  }
+
+  void* AllocateUninitialized(size_t len) {
+    return malloc(len);
+  }
+
+  void Free(void* data, size_t len) {
+    free(data);
+  }
+};
 
 static bool run_shell;
 
 int main(int argc, char* argv[]) {
+
+  Allocator allocator;
+
+  // needed to use array buffers
+  v8::V8::SetArrayBufferAllocator(&allocator);
+
   v8::V8::InitializeICU();
   v8::V8::SetFlagsFromCommandLine(&argc, argv, true);
+
   v8::Isolate* isolate = v8::Isolate::GetCurrent();
   run_shell = (argc == 1);
   int result;
@@ -85,7 +108,7 @@ v8::Handle<v8::Context> CreateShellContext(v8::Isolate* isolate) {
   global->Set(v8::String::New("quit"), v8::FunctionTemplate::New(Quit));
 
   // expose uv into global namespace so we can test with it
-  global->Set(v8::String::New("_uv_bindings"), uvjs::New());
+  global->Set(v8::String::New("__uv_bindings"), uvjs::New());
 
   return v8::Context::New(isolate, NULL, global);
 }

@@ -10,44 +10,44 @@ namespace uvjs {
 namespace detail {
 
 v8::Local<v8::Value> UVException(const uv_fs_t& res) {
-    static v8::Isolate* nan_isolate = v8::Isolate::GetCurrent();
+    static v8::Isolate* isolate = v8::Isolate::GetCurrent();
 
     const int32_t errorno = res.result;
     const char* msg = uv_strerror(errorno);
 
-    v8::Local<v8::String> estring = v8::String::NewFromUtf8(nan_isolate, uv_err_name(errorno));
-    v8::Local<v8::String> message = v8::String::NewFromUtf8(nan_isolate, msg);
+    v8::Local<v8::String> estring = v8::String::NewFromUtf8(isolate, uv_err_name(errorno));
+    v8::Local<v8::String> message = v8::String::NewFromUtf8(isolate, msg);
     v8::Local<v8::String> cons1 =
-        v8::String::Concat(estring, v8::String::NewFromUtf8(nan_isolate, ", "));
+        v8::String::Concat(estring, v8::String::NewFromUtf8(isolate, ", "));
     v8::Local<v8::String> cons2 = v8::String::Concat(cons1, message);
 
     v8::Local<v8::Value> err = v8::Exception::Error(cons2);
 
     v8::Local<v8::Object> obj = err->ToObject();
-    obj->Set(v8::String::New("errno"), v8::Integer::New(errno, nan_isolate));
+    obj->Set(v8::String::New("errno"), v8::Integer::New(errno, isolate));
     obj->Set(v8::String::New("code"), estring);
 
     return err;
 }
 
 v8::Local<v8::Value> UVException(const int errorno, const char *msg) {
-    static v8::Isolate* nan_isolate = v8::Isolate::GetCurrent();
+    static v8::Isolate* isolate = v8::Isolate::GetCurrent();
 
     if (!msg || !msg[0]) {
         msg = uv_strerror(errorno);
     }
 
-    v8::Local<v8::String> estring = v8::String::NewFromUtf8(nan_isolate, uv_err_name(errorno));
-    v8::Local<v8::String> message = v8::String::NewFromUtf8(nan_isolate, msg);
+    v8::Local<v8::String> estring = v8::String::NewFromUtf8(isolate, uv_err_name(errorno));
+    v8::Local<v8::String> message = v8::String::NewFromUtf8(isolate, msg);
     v8::Local<v8::String> cons1 =
-        v8::String::Concat(estring, v8::String::NewFromUtf8(nan_isolate, ", "));
+        v8::String::Concat(estring, v8::String::NewFromUtf8(isolate, ", "));
     v8::Local<v8::String> cons2 = v8::String::Concat(cons1, message);
 
     v8::Local<v8::Value> e = v8::Exception::Error(cons2);
 
     v8::Local<v8::Object> obj = e->ToObject();
     // TODO(piscisaureus) errno should probably go
-    obj->Set(v8::String::New("errno"), v8::Integer::New(errorno, nan_isolate));
+    obj->Set(v8::String::New("errno"), v8::Integer::New(errorno, isolate));
     obj->Set(v8::String::New("code"), estring);
 
     return e;
@@ -62,7 +62,6 @@ v8::Local<v8::Object> BuildStatsObject(const uv_stat_t* s) {
     v8::HandleScope handle_scope(isolate);
 
     v8::Local<v8::Object> stats = v8::Object::New();
-    //Local<Object> stats = env->stats_constructor_function()->NewInstance();
     if (stats.IsEmpty()) {
         return v8::Local<v8::Object>();
     }
@@ -129,12 +128,12 @@ v8::Local<v8::Object> BuildStatsObject(const uv_stat_t* s) {
 }
 
 static void After(uv_fs_t* req) {
-    static v8::Isolate* nan_isolate = v8::Isolate::GetCurrent();
-    v8::HandleScope scope(nan_isolate);
+    v8::Isolate* isolate = v8::Isolate::GetCurrent();
+    v8::HandleScope scope(isolate);
 
     assert(req->data);
 
-    NanCallback* req_wrap = static_cast<NanCallback*>(req->data);
+    Callback* cb= static_cast<Callback*>(req->data);
 
     // there is always at least one argument. "error"
     int argc = 1;
@@ -154,7 +153,7 @@ static void After(uv_fs_t* req) {
         }
     } else {
         // error value is empty or null for non-error.
-        argv[0] = Null(nan_isolate);
+        argv[0] = Null(isolate);
 
         // All have at least two args now.
         argc = 2;
@@ -185,11 +184,11 @@ static void After(uv_fs_t* req) {
                 break;
 
             case UV_FS_OPEN:
-                argv[1] = v8::Integer::New(req->result, nan_isolate);
+                argv[1] = v8::Integer::New(req->result, isolate);
                 break;
 
             case UV_FS_WRITE:
-                argv[1] = v8::Integer::New(req->result, nan_isolate);
+                argv[1] = v8::Integer::New(req->result, isolate);
                 break;
 
             case UV_FS_STAT:
@@ -199,13 +198,13 @@ static void After(uv_fs_t* req) {
                 break;
 
             case UV_FS_READLINK:
-                argv[1] = v8::String::NewFromUtf8(nan_isolate,
+                argv[1] = v8::String::NewFromUtf8(isolate,
                         static_cast<const char*>(req->ptr));
                 break;
 
             case UV_FS_READ:
                 // Buffer interface
-                argv[1] = v8::Integer::New(req->result, nan_isolate);
+                argv[1] = v8::Integer::New(req->result, isolate);
                 break;
 
             case UV_FS_READDIR:
@@ -216,7 +215,7 @@ static void After(uv_fs_t* req) {
                     v8::Local<v8::Array> names = v8::Array::New(nnames);
 
                     for (int i = 0; i < nnames; i++) {
-                        v8::Local<v8::String> name = v8::String::NewFromUtf8(nan_isolate, namebuf);
+                        v8::Local<v8::String> name = v8::String::NewFromUtf8(isolate, namebuf);
                         names->Set(i, name);
 #ifndef NDEBUG
                         namebuf += strlen(namebuf);
@@ -236,15 +235,16 @@ static void After(uv_fs_t* req) {
         }
     }
 
-    req_wrap->Call(argc, argv);
+    cb->Call(argc, argv);
 
     uv_fs_req_cleanup(req);
-    delete req_wrap;
+    delete cb;
 }
 
 void fs_readdir(const v8::FunctionCallbackInfo<v8::Value>& args) {
     v8::HandleScope handle_scope(args.GetIsolate());
 
+    assert(args.Length() == 4);
     assert(args[1]->IsString());
     assert(args[2]->IsInt32());
 
@@ -257,7 +257,8 @@ void fs_readdir(const v8::FunctionCallbackInfo<v8::Value>& args) {
 
         uv_fs_t* req = new uv_fs_t;
 
-        NanCallback* cb = new NanCallback(v8::Local<v8::Function>::Cast(args[3]));
+        Callback* cb = new Callback();
+        cb->Reset(args[3]);
         req->data = cb;
 
         const int err = uv_fs_readdir(loop, req, *path, flags, After);
@@ -305,6 +306,7 @@ void fs_readdir(const v8::FunctionCallbackInfo<v8::Value>& args) {
 void fs_open(const v8::FunctionCallbackInfo<v8::Value>& args) {
     v8::HandleScope handle_scope(args.GetIsolate());
 
+    assert(args.Length() == 5);
     assert(args[1]->IsString());
     assert(args[2]->IsInt32());
     assert(args[3]->IsInt32());
@@ -318,8 +320,9 @@ void fs_open(const v8::FunctionCallbackInfo<v8::Value>& args) {
     if (args[4]->IsFunction()) {
         uv_fs_t* req = new uv_fs_t;
 
-        // wrap callback to make it persistent
-        NanCallback* cb = new NanCallback(v8::Local<v8::Function>::Cast(args[4]));
+        Callback* cb = new Callback();
+        cb->Reset(args[4]);
+
         req->data = cb;
 
         const int err = uv_fs_open(loop, req, *path, flags, mode, After);
@@ -354,6 +357,7 @@ void fs_open(const v8::FunctionCallbackInfo<v8::Value>& args) {
 void fs_close(const v8::FunctionCallbackInfo<v8::Value>& args) {
     v8::HandleScope handle_scope(args.GetIsolate());
 
+    assert(args.Length() == 3);
     assert(args[1]->IsInt32());
 
     uv_loop_t* loop = Unwrap<uv_loop_t>(args[0]);
@@ -364,8 +368,8 @@ void fs_close(const v8::FunctionCallbackInfo<v8::Value>& args) {
 
         uv_fs_t* req = new uv_fs_t;
 
-        // wrap callback to make it persistent
-        NanCallback* cb = new NanCallback(v8::Local<v8::Function>::Cast(args[2]));
+        Callback* cb = new Callback();
+        cb->Reset(args[2]);
         req->data = cb;
 
         const int err = uv_fs_close(loop, req, fd, After);
@@ -399,24 +403,33 @@ void fs_close(const v8::FunctionCallbackInfo<v8::Value>& args) {
 void fs_read(const v8::FunctionCallbackInfo<v8::Value>& args) {
     v8::HandleScope handle_scope(args.GetIsolate());
 
+    assert(args.Length() == 5);
     assert(args[1]->IsInt32());
+    assert(args[2]->IsArrayBuffer());
     assert(args[3]->IsInt32());
 
     uv_loop_t* loop = Unwrap<uv_loop_t>(args[0]);
     const int fd = args[1]->Int32Value();
-    uv_buf_t* buf = Unwrap<uv_buf_t>(args[2]);
     const int offset = args[3]->Int32Value();
+
+    v8::Local<v8::ArrayBuffer> arr = v8::Local<v8::ArrayBuffer>::Cast(args[2]);
+    v8::ArrayBuffer::Contents buf = arr->Externalize();
+
+    // TODO persistent for arr
+    // we need to attach ourselves to the ArrayBuffer
+    // so we cleanup the externalized memory when variable dies
+    // but we also need to prevent variable from dying if we need the memory
 
     // async
     if (args[4]->IsFunction()) {
 
         uv_fs_t* req = new uv_fs_t;
 
-        // wrap callback to make it persistent
-        NanCallback* cb = new NanCallback(v8::Local<v8::Function>::Cast(args[4]));
+        Callback* cb = new Callback();
+        cb->Reset(args[4]);
         req->data = cb;
 
-        const int err = uv_fs_read(loop, req, fd, buf->base, buf->len, offset, After);
+        const int err = uv_fs_read(loop, req, fd, buf.Data(), buf.ByteLength(), offset, After);
         if (err < 0) {
             req->result = err;
             req->path = NULL;
@@ -429,10 +442,9 @@ void fs_read(const v8::FunctionCallbackInfo<v8::Value>& args) {
     }
 
     // SYNC
-
     uv_fs_t req;
 
-    const int err = uv_fs_read(loop, &req, fd, buf->base, buf->len, offset, NULL);
+    const int err = uv_fs_read(loop, &req, fd, buf.Data(), buf.ByteLength(), offset, NULL);
     if (err < 0) {
         req.result = err;
         return ThrowUVException(req);

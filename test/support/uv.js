@@ -1,1 +1,1 @@
-return require('../lib/uv');
+return __uv_bindings;
