@@ -4,8 +4,6 @@
 #include "uvjs_misc.h"
 #include "uvjs_loop.h"
 #include "uvjs_stream.h"
-#include "uvjs_buf.h"
-#include "uvjs_fs.h"
 #include "uvjs_timer.h"
 
 namespace uvjs {
@@ -37,20 +35,21 @@ v8::Handle<v8::ObjectTemplate> New() {
     // timers
     PROP(timer_init);
 
-    // stream
-    PROP(__stream_new);
-    PROP(listen);
+    // streams
     PROP(tcp_init);
-    PROP(close);
+    //PROP(__stream_new);
+    //PROP(listen);
+    //PROP(tcp_init);
+    //PROP(close);
 
     // buffer
-    PROP(buf_init);
+    //PROP(buf_init);
 
     // fs
-    PROP(fs_open);
-    PROP(fs_close);
-    PROP(fs_read);
-    PROP(fs_readdir);
+    //PROP(fs_open);
+    //PROP(fs_close);
+    //PROP(fs_read);
+    //PROP(fs_readdir);
 
 #undef PROP
 

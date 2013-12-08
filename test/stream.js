@@ -6,19 +6,19 @@ var uv = require('./support/uv');
 var default_loop = uv.default_loop();
 
 test('stream', function(done) {
+    var tcp_handle = uv.tcp_init(default_loop);
 
-    var stream = uv.stream_new();
+    tcp_handle.bind(null);
 
-    var res = uv.tcp_init(default_loop, stream);
-    assert(res === 0);
-
-    var res = uv.listen(stream, 0, function(server, status) {
-        // new connection
+    var err = tcp_handle.listen(0, function(server, status) {
         assert(false);
     });
-    assert(res === 0);
 
-    uv.close(stream, function(err) {
+    var socket_info = tcp_handle.getsockname();
+    assert(err === 0);
+
+    tcp_handle.close(function(err) {
         done();
     });
 });
+

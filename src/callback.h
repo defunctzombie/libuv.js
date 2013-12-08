@@ -3,60 +3,52 @@
 namespace uvjs {
 namespace detail {
 
-template <class TypeName>
-static v8::Local<TypeName> NanPersistentToLocal(const v8::Persistent<TypeName>& persistent) {
-  static v8::Isolate* nan_isolate = v8::Isolate::GetCurrent();
-  v8::HandleScope scope(nan_isolate);
+// Callback holds a persistent function that can be invoked
+// callback can also be asked to reset and free the function
+class Callback {
+public:
+    Callback() {}
 
-  if (persistent.IsWeak()) {
-    return v8::Local<TypeName>::New(nan_isolate, persistent);
-  }
+    ~Callback() {
+        if (handle.IsEmpty()) {
+            return;
+        }
 
-  return *reinterpret_cast<v8::Local<TypeName>*>(
-        const_cast<v8::Persistent<TypeName>*>(&persistent));
-}
-
-class NanCallback {
-  public:
-    NanCallback(const v8::Local<v8::Function> &fn) {
-      static v8::Isolate* nan_isolate = v8::Isolate::GetCurrent();
-      v8::HandleScope scope(nan_isolate);
-
-      v8::Local<v8::Object> obj = v8::Object::New();
-      obj->Set(v8::String::NewSymbol("callback"), fn);
-      handle.Reset(nan_isolate, obj);
+        handle.Dispose();
+        handle.Reset();
     }
 
-    ~NanCallback() {
-      if (handle.IsEmpty()) return;
-      handle.Dispose();
-      handle.Clear();
+    // clears the persistent if we no longer need the callback
+    void Reset() {
+        handle.Reset();
     }
 
-    v8::Local<v8::Function> GetFunction () {
-      return NanPersistentToLocal(handle)->Get(v8::String::NewSymbol("callback"))
-        .As<v8::Function>();
+    void Reset(const v8::Local<v8::Value>& fn) {
+        handle.Reset(v8::Isolate::GetCurrent(), v8::Local<v8::Function>::Cast(fn));
+    }
+
+    bool IsEmpty() {
+        return handle.IsEmpty();
     }
 
     void Call(int argc, v8::Local<v8::Value> argv[]) {
-      static v8::Isolate* nan_isolate = v8::Isolate::GetCurrent();
-      v8::HandleScope scope(nan_isolate);
+        v8::Isolate* isolate = v8::Isolate::GetCurrent();
+        v8::HandleScope scope(isolate);
 
-      v8::Local<v8::Function> callback = NanPersistentToLocal(handle)->
-        Get(v8::String::NewSymbol("callback")).As<v8::Function>();
+        v8::Local<v8::Function> fn = v8::Local<v8::Function>::New(isolate, handle);
 
-      v8::TryCatch try_catch;
-      try_catch.SetVerbose(true);
+        v8::TryCatch try_catch;
+        try_catch.SetVerbose(true);
 
-      v8::Local<v8::Value> ret = callback->Call(v8::Context::GetCurrent()->Global(), argc, argv);
+        fn->Call(v8::Context::GetCurrent()->Global(), argc, argv);
 
-      if (try_catch.HasCaught()) {
-        // TODO ??
-      }
+        if (try_catch.HasCaught()) {
+            isolate->ThrowException(try_catch.Exception());
+        }
     }
 
-  private:
-    v8::Persistent<v8::Object> handle;
+private:
+    v8::Persistent<v8::Function> handle;
 };
 
 } // namespace detail

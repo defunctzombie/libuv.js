@@ -7,7 +7,7 @@ var uv = require('./support/uv');
 
 require('./misc');
 require('./timer');
-require('./fs');
+//require('./fs');
 require('./stream');
 
 // launch our loop, without this some tests won't run

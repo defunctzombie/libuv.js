@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <string.h>
 
+#include "unwrap.h"
 #include "callback.h"
 
 namespace uvjs {
@@ -247,7 +248,7 @@ void fs_readdir(const v8::FunctionCallbackInfo<v8::Value>& args) {
     assert(args[1]->IsString());
     assert(args[2]->IsInt32());
 
-    uv_loop_t* loop = UnwrapLoop(args[0]);
+    uv_loop_t* loop = Unwrap<uv_loop_t>(args[0]);
     v8::String::Utf8Value path(args[1]);
     const int flags = args[2]->Int32Value();
 
@@ -308,7 +309,7 @@ void fs_open(const v8::FunctionCallbackInfo<v8::Value>& args) {
     assert(args[2]->IsInt32());
     assert(args[3]->IsInt32());
 
-    uv_loop_t* loop = UnwrapLoop(args[0]);
+    uv_loop_t* loop = Unwrap<uv_loop_t>(args[0]);
     v8::String::Utf8Value path(args[1]);
     const int flags = args[2]->Int32Value();
     const int mode = args[3]->Int32Value();
@@ -355,7 +356,7 @@ void fs_close(const v8::FunctionCallbackInfo<v8::Value>& args) {
 
     assert(args[1]->IsInt32());
 
-    uv_loop_t* loop = UnwrapLoop(args[0]);
+    uv_loop_t* loop = Unwrap<uv_loop_t>(args[0]);
     const int32_t fd = args[1]->Int32Value();
 
     // async
@@ -401,9 +402,9 @@ void fs_read(const v8::FunctionCallbackInfo<v8::Value>& args) {
     assert(args[1]->IsInt32());
     assert(args[3]->IsInt32());
 
-    uv_loop_t* loop = UnwrapLoop(args[0]);
+    uv_loop_t* loop = Unwrap<uv_loop_t>(args[0]);
     const int fd = args[1]->Int32Value();
-    uv_buf_t* buf = UnwrapBuf(args[2]);
+    uv_buf_t* buf = Unwrap<uv_buf_t>(args[2]);
     const int offset = args[3]->Int32Value();
 
     // async

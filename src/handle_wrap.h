@@ -22,8 +22,9 @@
 #pragma once
 
 #include <assert.h>
-
 #include <v8.h>
+
+#include "callback.h"
 
 namespace uvjs {
 namespace detail {
@@ -48,15 +49,17 @@ public:
         // because v8 might be dead already and our After_close cb never got triggered
     }
 
-    template <class T>
-    static inline T* Unwrap(v8::Handle<v8::Object> handle) {
-        assert(!handle.IsEmpty());
-        assert(handle->InternalFieldCount() > 0);
-        // Cast to HandleWrap before casting to T.  A direct cast from void
-        // to T won't work right when T has more than one base class.
-        void* ptr = handle->GetAlignedPointerFromInternalField(0);
-        HandleWrap* wrap = static_cast<HandleWrap<handle_t> *>(ptr);
-        return static_cast<T*>(wrap);
+    Callback& close_callback() {
+        return _close_cb;
+    }
+
+    void close() {
+        // we have a close callback so we need to stay alive for that
+        if (!_close_cb.IsEmpty()) {
+            this->Ref();
+        }
+
+        uv_close(_handle, After_close);
     }
 
 
@@ -114,6 +117,15 @@ public:
     static void After_close(uv_handle_t* handle) {
         v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
         HandleWrap<handle_t>* wrap = static_cast<HandleWrap<handle_t>* >(handle->data);
+
+        if (!wrap->close_callback().IsEmpty()) {
+            wrap->Unref();
+
+            const int argc = 0;
+            v8::Local<v8::Value> argv[argc] = {};
+            wrap->close_callback().Call(argc, argv);
+        }
+
         delete wrap;
     }
 
@@ -124,6 +136,7 @@ protected:
     }
 
     handle_t* _handle;
+    Callback _close_cb;
 
 private:
     static void WeakCallback(const v8::WeakCallbackData<v8::Object, HandleWrap<handle_t> >& data) {

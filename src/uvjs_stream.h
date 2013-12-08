@@ -3,160 +3,172 @@
 #include <assert.h>
 #include <uv.h>
 
-#include "callback.h"
+#include "handle_wrap.h"
+#include "unwrap.h"
 
 namespace uvjs {
 namespace detail {
 
+void After_Listen(uv_stream_t* server, int status);
+
 template <typename T>
-static inline T* Unwrap(v8::Handle<v8::Value> val) {
-    assert(val->IsObject());
+class StreamWrap : public HandleWrap<T> {
+public:
+    StreamWrap() : HandleWrap<T>() {}
 
-    v8::Handle<v8::Object> handle = val->ToObject();
-    assert(!handle.IsEmpty());
-    assert(handle->InternalFieldCount() > 0);
-
-    return static_cast<T*>(handle->GetAlignedPointerFromInternalField(0));
-}
-
-static inline uv_stream_t* UnwrapStream(v8::Handle<v8::Value> val) {
-
-    assert(val->IsObject());
-
-    v8::Handle<v8::Object> handle = val->ToObject();
-    assert(!handle.IsEmpty());
-    assert(handle->InternalFieldCount() > 0);
-
-    return static_cast<uv_stream_t*>(handle->GetAlignedPointerFromInternalField(0));
-}
-
-static void WeakUvStream(v8::Isolate* isolate, v8::Persistent<v8::Object>* persistent,
-        uv_tcp_t* stream) {
-
-    v8::HandleScope scope(isolate);
-    assert(stream);
-
-    if (persistent->IsEmpty()) {
-        return;
+    int listen(int backlog) {
+        assert(this->_handle);
+        this->Ref();
+        return uv_listen(reinterpret_cast<uv_stream_t*>(this->_handle), backlog, After_Listen);
     }
 
-    assert(persistent->IsNearDeath());
-    persistent->ClearWeak();
-    persistent->Dispose();
+    Callback& listen_callback() {
+        return _listen_cb;
+    }
 
-    delete stream;
-}
+protected:
+    Callback _listen_cb;
 
-void After_listen(uv_stream_t* server, int status) {
-    static v8::Isolate* nan_isolate = v8::Isolate::GetCurrent();
-    v8::HandleScope scope(nan_isolate);
+private:
+};
+
+class TcpWrap : public StreamWrap<uv_tcp_t> {
+public:
+    TcpWrap() : StreamWrap<uv_tcp_t>() {}
+
+    int init(uv_loop_t* loop) {
+        return uv_tcp_init(loop, _handle);
+    }
+
+    int bind(const struct sockaddr* addr) {
+        return uv_tcp_bind(_handle, addr);
+    }
+
+    // TODO get socket name
+    // return socket struct wrapper/object access
+    int getsockname() {
+        struct sockaddr sockname;
+        int namelen = sizeof sockname;
+        const int err = uv_tcp_getsockname(_handle, &sockname, &namelen);
+
+        struct sockaddr_in* sock = reinterpret_cast<struct sockaddr_in*>(&sockname);
+
+        printf("port %d\n", sock->sin_port);
+        return err;
+    }
+
+private:
+};
+
+void After_Listen(uv_stream_t* server, int status) {
+    v8::Isolate* isolate = v8::Isolate::GetCurrent();
+    v8::HandleScope scope(isolate);
 
     assert(server->data);
-    NanCallback* req_wrap = static_cast<NanCallback*>(server->data);
 
-    const int argc = 2;
-    v8::Local<v8::Value> argv[argc] = { v8::Undefined() , v8::Undefined() };
+    StreamWrap<uv_stream_t>* wrap = static_cast<StreamWrap<uv_stream_t> *>(server->data);
 
-    // wrap the server
-    // wrap status
-    req_wrap->Call(argc, argv);
+    v8::Local<v8::Value> instance = v8::Local<v8::Object>::New(isolate, wrap->persistent());
 
-    delete req_wrap;
-}
+    wrap->Unref();
 
-void After_close(uv_handle_t* handle) {
-    static v8::Isolate* nan_isolate = v8::Isolate::GetCurrent();
-    v8::HandleScope scope(nan_isolate);
-
-    assert(handle->data);
-    NanCallback* req_wrap = static_cast<NanCallback*>(handle->data);
-
-    const int argc = 1;
-    v8::Local<v8::Value> argv[argc] = { v8::Undefined() };
-
-    req_wrap->Call(argc, argv);
-
-    delete req_wrap;
-}
-
-void __stream_new(const v8::FunctionCallbackInfo<v8::Value>& args) {
-    v8::HandleScope handle_scope(args.GetIsolate());
-
-    uv_tcp_t* new_stream = new uv_tcp_t;
-
-    v8::Handle<v8::ObjectTemplate> obj = v8::ObjectTemplate::New();
-    obj->SetInternalFieldCount(1);
-
-    v8::Local<v8::Object> instance = obj->NewInstance();
-    instance->SetAlignedPointerInInternalField(0, new_stream);
-
-    v8::Persistent<v8::Object> persistent;
-    persistent.Reset(v8::Isolate::GetCurrent(), instance);
-    persistent.MakeWeak(new_stream, WeakUvStream);
-    persistent.MarkIndependent();
-
-    args.GetReturnValue().Set(instance);
-}
-
-void listen(const v8::FunctionCallbackInfo<v8::Value>& args) {
-    v8::HandleScope handle_scope(args.GetIsolate());
-
-    assert(args.Length() == 3);
-    assert(args[1]->IsInt32());
-
-    // user needs to be able to make a uv_stream_t
-    // this can be done via new uv.stream_t()
-    // which will return a stream_t wrapper?
-
-    uv_stream_t* stream = UnwrapStream(args[0]);
-
-    stream->data = new NanCallback(v8::Local<v8::Function>::Cast(args[2]));
-
-    const int res = uv_listen(stream, args[1]->Int32Value(), After_listen);
-
-    if (res != 0) {
-        delete stream->data;
-        stream->data = NULL;
+    if (!wrap->listen_callback().IsEmpty()) {
+        const int argc = 2;
+        v8::Local<v8::Value> argv[argc] = { instance , v8::Integer::New(status) };
+        wrap->listen_callback().Call(argc, argv);
     }
+}
 
-    args.GetReturnValue().Set(v8::Integer::New(res));
+void Stream_Listen(const v8::FunctionCallbackInfo<v8::Value>& args) {
+    v8::HandleScope handle_scope(args.GetIsolate());
+
+    assert(args.Length() == 2);
+    assert(args[0]->IsInt32());
+
+    StreamWrap<uv_stream_t>* wrap = Unwrap<StreamWrap<uv_stream_t> >(args.This());
+
+    wrap->listen_callback().Reset(args[2]);
+
+    const int err = wrap->listen(args[0]->Int32Value());
+    args.GetReturnValue().Set(v8::Integer::New(err));
+}
+
+void Tcp_Connect(const v8::FunctionCallbackInfo<v8::Value>& args) {
+    v8::HandleScope handle_scope(args.GetIsolate());
+    assert(args.Length() == 3);
+    //TcpWrap* wrap = Unwrap<TcpWrap>(args.This());
+}
+
+void Tcp_Bind(const v8::FunctionCallbackInfo<v8::Value>& args) {
+    v8::HandleScope handle_scope(args.GetIsolate());
+
+    assert(args.Length() == 1);
+
+    TcpWrap* wrap = Unwrap<TcpWrap>(args.This());
+
+    struct sockaddr_in addr;
+
+    assert(uv_ip4_addr("0.0.0.0", 0, &addr) == 0);
+
+    const int err = wrap->bind(reinterpret_cast<sockaddr*>(&addr));
+    assert(err == 0);
+    args.GetReturnValue().Set(v8::Integer::New(err));
+}
+
+void Tcp_Getsockname(const v8::FunctionCallbackInfo<v8::Value>& args) {
+    v8::HandleScope handle_scope(args.GetIsolate());
+
+    TcpWrap* wrap = Unwrap<TcpWrap>(args.This());
+    wrap->getsockname();
+
+    args.GetReturnValue().Set(v8::Integer::New(0));
+}
+
+void Handle_Close(const v8::FunctionCallbackInfo<v8::Value>& args) {
+    v8::HandleScope handle_scope(args.GetIsolate());
+
+    assert(args.Length() == 1);
+    assert(args[0]->IsFunction());
+
+    HandleWrap<uv_handle_t>* wrap = Unwrap<HandleWrap<uv_handle_t> >(args.This());
+
+    wrap->close_callback().Reset(args[0]);
+    wrap->close();
 }
 
 void tcp_init(const v8::FunctionCallbackInfo<v8::Value>& args) {
     v8::HandleScope handle_scope(args.GetIsolate());
 
-    assert(args.Length() == 2);
+    assert(args.Length() == 1);
 
-    // user needs to be able to make a uv_stream_t
-    // this can be done via new uv.stream_t()
-    // which will return a stream_t wrapper?
+    uv_loop_t* loop = Unwrap<uv_loop_t>(args[0]);
 
-    uv_loop_t* loop = UnwrapLoop(args[0]);
-    uv_tcp_t* stream = Unwrap<uv_tcp_t>(args[1]);
+    TcpWrap* wrap = new TcpWrap();
 
-    const int res = uv_tcp_init(loop, stream);
+    int err = wrap->init(loop);
+    assert(err == 0); // TODO uv throw
 
-    assert(res == 0);
+    // timer object container
+    v8::Handle<v8::ObjectTemplate> obj = v8::ObjectTemplate::New();
+    obj->SetInternalFieldCount(1);
 
-    args.GetReturnValue().Set(v8::Integer::New(res));
-}
+    // TODO better mixin of methods from base classes
 
-void close(const v8::FunctionCallbackInfo<v8::Value>& args) {
-    v8::HandleScope handle_scope(args.GetIsolate());
+    // handle stuff
+    obj->Set(v8::String::NewSymbol("close"), v8::FunctionTemplate::New(Handle_Close));
 
-    assert(args.Length() == 2);
+    // stream stuff
+    obj->Set(v8::String::NewSymbol("listen"), v8::FunctionTemplate::New(Stream_Listen));
 
-    // handle->data needs to point to the wrapper we have
-    // and not each callback...?
+    // tcp stuff
+    obj->Set(v8::String::NewSymbol("connect"), v8::FunctionTemplate::New(Tcp_Connect));
+    obj->Set(v8::String::NewSymbol("bind"), v8::FunctionTemplate::New(Tcp_Bind));
+    obj->Set(v8::String::NewSymbol("getsockname"), v8::FunctionTemplate::New(Tcp_Getsockname));
 
-    uv_handle_t* handle = Unwrap<uv_handle_t>(args[0]);
+    v8::Local<v8::Object> instance = obj->NewInstance();
+    wrap->Wrap(instance);
 
-    // shit... we can't do this
-    // well.. wtf do we do?
-
-    handle->data = new NanCallback(v8::Local<v8::Function>::Cast(args[1]));
-
-    uv_close(handle, After_close);
+    args.GetReturnValue().Set(instance);
 }
 
 } // namespace detail

@@ -4,6 +4,7 @@
 #include <uv.h>
 
 #include "handle_wrap.h"
+#include "unwrap.h"
 #include "callback.h"
 
 namespace uvjs {
@@ -16,13 +17,8 @@ void After_timer(uv_timer_t* handle, int status);
 // can outlive the user's desire to hold the handle
 class TimerWrap : public HandleWrap<uv_timer_t> {
 public:
-    TimerWrap() : HandleWrap<uv_timer_t>(), _cb(0) {}
-
-    ~TimerWrap() {
-        if (_cb) {
-            delete _cb;
-        }
-    }
+    TimerWrap() : HandleWrap<uv_timer_t>() {}
+    ~TimerWrap() {}
 
     int init(uv_loop_t* loop) {
         return uv_timer_init(loop, _handle);
@@ -33,9 +29,8 @@ public:
 
         // free up the callback, and unref since we no longer
         // have to live for the callback
-        if (_cb) {
-            delete _cb;
-            _cb = NULL;
+        if (!_cb.IsEmpty()) {
+            _cb.Reset();
             this->Unref();
         }
 
@@ -50,17 +45,12 @@ public:
         return uv_timer_start(_handle, After_timer, duration, repeat);
     }
 
-    void set_callback(const v8::Local<v8::Function>& fn) {
-        assert(!_cb);
-        _cb = new NanCallback(fn);
-    }
-
-    void Call(int argc, v8::Local<v8::Value> argv[]) {
-        _cb->Call(argc, argv);
+    Callback& callback() {
+        return _cb;
     }
 
 private:
-    NanCallback* _cb;
+    Callback _cb;
 };
 
 // timer has fired
@@ -76,7 +66,7 @@ void After_timer(uv_timer_t* handle, int status) {
     v8::Local<v8::Value> argv[argc] = { v8::Integer::New(status) };
 
     // invoke timer callback
-    wrap->Call(argc, argv);
+    wrap->callback().Call(argc, argv);
 
     const int active = uv_is_active(reinterpret_cast<uv_handle_t*>(handle));
     if (active > 0) {
@@ -91,7 +81,7 @@ void After_timer(uv_timer_t* handle, int status) {
 void Timer_Stop(const v8::FunctionCallbackInfo<v8::Value>& args) {
     v8::HandleScope handle_scope(args.GetIsolate());
 
-    TimerWrap* wrap = HandleWrap<uv_timer_t>::Unwrap<TimerWrap>(args.This());
+    TimerWrap* wrap = Unwrap<TimerWrap>(args.This());
     const int res = wrap->stop();
     assert(res == 0);
 
@@ -106,12 +96,12 @@ void Timer_Start(const v8::FunctionCallbackInfo<v8::Value>& args) {
     assert(args[1]->IsInt32());
     assert(args[2]->IsFunction());
 
-    TimerWrap* wrap = HandleWrap<uv_timer_t>::Unwrap<TimerWrap>(args.This());
+    TimerWrap* wrap = Unwrap<TimerWrap>(args.This());
 
     const int duration = args[0]->Int32Value();
     const int repeat = args[1]->Int32Value();
 
-    wrap->set_callback(v8::Local<v8::Function>::Cast(args[2]));
+    wrap->callback().Reset(args[2]);
 
     const int err = wrap->start(duration, repeat);
 
@@ -127,13 +117,12 @@ void Timer_Start(const v8::FunctionCallbackInfo<v8::Value>& args) {
 void Timer_Again(const v8::FunctionCallbackInfo<v8::Value>& args) {
     v8::HandleScope handle_scope(args.GetIsolate());
 
-    TimerWrap* wrap = HandleWrap<uv_timer_t>::Unwrap<TimerWrap>(args.This());
+    TimerWrap* wrap = Unwrap<TimerWrap>(args.This());
     const int res = wrap->again();
     assert(res == 0);
 
     args.GetReturnValue().Set(v8::Integer::New(res));
 }
-
 
 void timer_init(const v8::FunctionCallbackInfo<v8::Value>& args) {
     v8::HandleScope handle_scope(args.GetIsolate());
