@@ -6,6 +6,7 @@
 #include "handle_wrap.h"
 #include "unwrap.h"
 #include "callback.h"
+#include "throw.h"
 
 namespace uvjs {
 namespace detail {
@@ -134,16 +135,26 @@ void timer_init(const v8::FunctionCallbackInfo<v8::Value>& args) {
     TimerWrap* wrap = new TimerWrap();
 
     int err = wrap->init(loop);
-    assert(err == 0); // TODO uv throw
+
+    // we throw here because we return a timer handle otherwise
+    // different than regular uv api on purpose
+    if (err) {
+        delete wrap;
+        return UVThrow(err);
+    }
 
     // timer object container
     v8::Handle<v8::ObjectTemplate> obj = v8::ObjectTemplate::New();
     obj->SetInternalFieldCount(1);
+
+    // mixin handle features
+    TimerWrap::Mixin(obj);
+
     obj->Set(v8::String::NewSymbol("stop"), v8::FunctionTemplate::New(Timer_Stop));
     obj->Set(v8::String::NewSymbol("start"), v8::FunctionTemplate::New(Timer_Start));
     obj->Set(v8::String::NewSymbol("again"), v8::FunctionTemplate::New(Timer_Again));
-    //obj->Set(v8::String::NewSymbol("set_repeat"), v8::FunctionTemplate::New(Timer_Stop));
-    //obj->Set(v8::String::NewSymbol("get_repeat"), v8::FunctionTemplate::New(Timer_Stop));
+    //obj->Set(v8::String::NewSymbol("set_repeat"), v8::FunctionTemplate::New(Timer_Set_Repeat));
+    //obj->Set(v8::String::NewSymbol("get_repeat"), v8::FunctionTemplate::New(Timer_Get_Repeat));
 
     v8::Local<v8::Object> instance = obj->NewInstance();
     wrap->Wrap(instance);

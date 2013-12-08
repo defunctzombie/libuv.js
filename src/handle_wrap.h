@@ -24,6 +24,7 @@
 #include <assert.h>
 #include <v8.h>
 
+#include "unwrap.h"
 #include "callback.h"
 
 namespace uvjs {
@@ -114,6 +115,18 @@ public:
         }
     }
 
+    static void Handle_Close(const v8::FunctionCallbackInfo<v8::Value>& args) {
+        v8::HandleScope handle_scope(args.GetIsolate());
+
+        assert(args.Length() == 1);
+        assert(args[0]->IsFunction());
+
+        HandleWrap<uv_handle_t>* wrap = Unwrap<HandleWrap<uv_handle_t> >(args.This());
+
+        wrap->close_callback().Reset(args[0]);
+        wrap->close();
+    }
+
     static void After_close(uv_handle_t* handle) {
         v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
         HandleWrap<handle_t>* wrap = static_cast<HandleWrap<handle_t>* >(handle->data);
@@ -127,6 +140,10 @@ public:
         }
 
         delete wrap;
+    }
+
+    static void Mixin(v8::Handle<v8::ObjectTemplate> obj) {
+        obj->Set(v8::String::NewSymbol("close"), v8::FunctionTemplate::New(Handle_Close));
     }
 
 protected:

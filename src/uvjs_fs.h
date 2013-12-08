@@ -10,7 +10,7 @@ namespace uvjs {
 namespace detail {
 
 v8::Local<v8::Value> UVException(const uv_fs_t& res) {
-    static v8::Isolate* isolate = v8::Isolate::GetCurrent();
+    v8::Isolate* isolate = v8::Isolate::GetCurrent();
 
     const int32_t errorno = res.result;
     const char* msg = uv_strerror(errorno);
@@ -31,7 +31,7 @@ v8::Local<v8::Value> UVException(const uv_fs_t& res) {
 }
 
 v8::Local<v8::Value> UVException(const int errorno, const char *msg) {
-    static v8::Isolate* isolate = v8::Isolate::GetCurrent();
+    v8::Isolate* isolate = v8::Isolate::GetCurrent();
 
     if (!msg || !msg[0]) {
         msg = uv_strerror(errorno);
