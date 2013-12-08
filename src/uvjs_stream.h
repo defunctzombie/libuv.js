@@ -108,6 +108,7 @@ void Tcp_Bind(const v8::FunctionCallbackInfo<v8::Value>& args) {
 
     struct sockaddr_in addr;
 
+    // TODO need to accept this info via arg
     assert(uv_ip4_addr("0.0.0.0", 0, &addr) == 0);
 
     const int err = wrap->bind(reinterpret_cast<sockaddr*>(&addr));

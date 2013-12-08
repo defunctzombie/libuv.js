@@ -10,7 +10,6 @@ namespace detail {
 // the value is expected to be Object type
 // and have an internal field for the uv_loop_t*
 static inline uv_loop_t* UnwrapLoop(v8::Handle<v8::Value> val) {
-
     assert(val->IsObject());
 
     v8::Handle<v8::Object> handle = val->ToObject();
