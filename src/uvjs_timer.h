@@ -55,8 +55,8 @@ private:
 
 // timer has fired
 void After_timer(uv_timer_t* handle, int status) {
-    static v8::Isolate* nan_isolate = v8::Isolate::GetCurrent();
-    v8::HandleScope scope(nan_isolate);
+    v8::Isolate* isolate = v8::Isolate::GetCurrent();
+    v8::HandleScope scope(isolate);
 
     assert(handle->data);
 
