@@ -1,5 +1,7 @@
 #pragma once
 
+#include <assert.h>
+
 namespace uvjs {
 namespace detail {
 
@@ -24,6 +26,7 @@ public:
     }
 
     void Reset(const v8::Local<v8::Value>& fn) {
+        assert(fn->IsFunction());
         handle.Reset(v8::Isolate::GetCurrent(), v8::Local<v8::Function>::Cast(fn));
     }
 

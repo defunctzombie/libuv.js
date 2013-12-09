@@ -35,7 +35,7 @@ public:
 
         StreamWrap<uv_stream_t>* wrap = Unwrap<StreamWrap<uv_stream_t> >(args.This());
 
-        wrap->listen_callback().Reset(args[2]);
+        wrap->listen_callback().Reset(args[1]);
 
         const int err = wrap->listen(args[0]->Int32Value());
         args.GetReturnValue().Set(v8::Integer::New(err));
@@ -64,7 +64,9 @@ void After_Listen(uv_stream_t* server, int status) {
 
     v8::Local<v8::Value> instance = v8::Local<v8::Object>::New(isolate, wrap->persistent());
 
-    wrap->Unref();
+    // unref here is not appropriate...
+    // we can only unref when closed
+    //wrap->Unref();
 
     if (!wrap->listen_callback().IsEmpty()) {
         const int argc = 2;

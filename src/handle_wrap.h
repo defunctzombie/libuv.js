@@ -123,27 +123,52 @@ public:
 
         HandleWrap<uv_handle_t>* wrap = Unwrap<HandleWrap<uv_handle_t> >(args.This());
 
+        if (uv_is_closing(wrap->_handle)) {
+            v8::Local<v8::String> message = v8::String::NewFromUtf8(args.GetIsolate(),
+                    "already closing");
+            args.GetIsolate()->ThrowException(v8::Exception::Error(message));
+            return;
+        };
+
+        // set the close callback and close
         wrap->close_callback().Reset(args[0]);
         wrap->close();
     }
 
+    // after calling close during normal operations
     static void After_close(uv_handle_t* handle) {
         v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
         HandleWrap<handle_t>* wrap = static_cast<HandleWrap<handle_t>* >(handle->data);
 
         if (!wrap->close_callback().IsEmpty()) {
-            wrap->Unref();
+            wrap->Unref(); // unref for close
 
             const int argc = 0;
             v8::Local<v8::Value> argv[argc] = {};
             wrap->close_callback().Call(argc, argv);
-        }
 
+            // a closed handle will call nothing else now
+            // we can safely make it go to 0 refs and become weak
+            // this is needed for handles which might have called .listen
+            // and created a long lived open ref
+            for (int i=0 ; i < wrap->_refs ; ++i) {
+                wrap->Unref();
+            }
+        }
+    }
+
+    // after calling close via weak callback
+    // different than normal operation since it requires cleanup of wrap
+    static void After_death_close(uv_handle_t* handle) {
+        v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
+        HandleWrap<handle_t>* wrap = static_cast<HandleWrap<handle_t>* >(handle->data);
+
+        handle->data = NULL;
         delete wrap;
     }
 
     static void Mixin(v8::Handle<v8::ObjectTemplate> obj) {
-        obj->Set(v8::String::NewSymbol("close"), v8::FunctionTemplate::New(Handle_Close));
+        obj->Set(v8::String::NewSymbol("close"), v8::FunctionTemplate::New(HandleWrap<uv_handle_t>::Handle_Close));
     }
 
 protected:
@@ -167,11 +192,19 @@ private:
         // dragons
         // instead of clearing persistent in the destructor, we need to do it here
         // this is because v8 might be shutting down and will be dead before our
-        // After_close callback has a chance to run
+        // After_close callback has a chance to run or by the time we delete things
         wrap->persistent().ClearWeak();
         wrap->persistent().Reset();
 
-        uv_close(reinterpret_cast<uv_handle_t*>(wrap->_handle), After_close);
+        // already closing, don't close again
+        // wrap is safe to delete here because if close has not yet triggered
+        // it will have kept the handle reference alive
+        if (uv_is_closing(reinterpret_cast<uv_handle_t*>(wrap->_handle))) {
+            delete wrap;
+            return;
+        }
+
+        uv_close(reinterpret_cast<uv_handle_t*>(wrap->_handle), After_death_close);
     }
 
     int _refs;
