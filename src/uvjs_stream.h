@@ -36,7 +36,7 @@ public:
 
         //uv_ip4_name to get string for IP
 
-        printf("port %d\n", htons(sock->sin_port));
+        //printf("port %d\n", htons(sock->sin_port));
         return err;
     }
 
@@ -45,26 +45,44 @@ public:
                 reinterpret_cast<uv_stream_t*>(client->_handle));
     }
 
+    int connect(struct sockaddr* addr) {
+        uv_connect_t* req = new uv_connect_t();
+        req->data = this;
+        const int err = uv_tcp_connect(req, this->_handle, addr, After_Connect);
+        if (err) {
+            delete req;
+        }
+        return err;
+    }
+
+    Callback& connect_callback() {
+        return _connect_cb;
+    }
+
     static void Tcp_Accept(const v8::FunctionCallbackInfo<v8::Value>& args);
 
+    static void After_Connect(uv_connect_t* req, int status) {
+        v8::HandleScope scope(v8::Isolate::GetCurrent());
+
+        assert(req->data);
+        TcpWrap* wrap = static_cast<TcpWrap*>(req->data);
+        delete req;
+
+        if (!wrap->connect_callback().IsEmpty()) {
+            wrap->connect_callback().Call();
+        }
+    };
+
 private:
+    Callback _connect_cb;
 };
 
 void Tcp_Connect(const v8::FunctionCallbackInfo<v8::Value>& args) {
     v8::HandleScope handle_scope(args.GetIsolate());
-    assert(args.Length() == 3);
-    //TcpWrap* wrap = Unwrap<TcpWrap>(args.This());
-}
 
-void Tcp_Bind(const v8::FunctionCallbackInfo<v8::Value>& args) {
-    v8::HandleScope handle_scope(args.GetIsolate());
-
-    assert(args.Length() == 1);
+    assert(args.Length() == 2);
     assert(args[0]->IsObject());
-
-    TcpWrap* wrap = Unwrap<TcpWrap>(args.This());
-
-    // read fields from object into addr struct
+    assert(args[1]->IsFunction());
 
     // result addr struct
     struct sockaddr_in addr;
@@ -84,11 +102,44 @@ void Tcp_Bind(const v8::FunctionCallbackInfo<v8::Value>& args) {
         const char* ip = *(v8::String::Utf8Value(ip_val));
         const int port = port_val->Int32Value();
 
-        printf("%s %d\n", ip, port);
+        assert(uv_ip4_addr(ip, port, &addr) == 0);
+    }
+
+    TcpWrap* wrap = Unwrap<TcpWrap>(args.This());
+    wrap->connect_callback().Reset(args[1]);
+
+    const int err = wrap->connect(reinterpret_cast<sockaddr*>(&addr));
+    args.GetReturnValue().Set(v8::Integer::New(err));
+}
+
+void Tcp_Bind(const v8::FunctionCallbackInfo<v8::Value>& args) {
+    v8::HandleScope handle_scope(args.GetIsolate());
+
+    assert(args.Length() == 1);
+    assert(args[0]->IsObject());
+
+    // result addr struct
+    struct sockaddr_in addr;
+
+    // process object into sockaddr struct
+    {
+        // process
+        v8::Local<v8::Object> obj = v8::Local<v8::Object>::Cast(args[0]);
+        v8::Local<v8::Value> port_val = obj->Get(v8::String::NewSymbol("port"));
+        v8::Local<v8::Value> ip_val = obj->Get(v8::String::NewSymbol("address"));
+        v8::Local<v8::Value> family_val = obj->Get(v8::String::NewSymbol("family"));
+
+        assert(port_val->IsInt32());
+        assert(ip_val->IsString());
+        assert(family_val->IsString());
+
+        const char* ip = *(v8::String::Utf8Value(ip_val));
+        const int port = port_val->Int32Value();
 
         assert(uv_ip4_addr(ip, port, &addr) == 0);
     }
 
+    TcpWrap* wrap = Unwrap<TcpWrap>(args.This());
     const int err = wrap->bind(reinterpret_cast<sockaddr*>(&addr));
     args.GetReturnValue().Set(v8::Integer::New(err));
 }

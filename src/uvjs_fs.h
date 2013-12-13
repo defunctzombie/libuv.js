@@ -413,7 +413,20 @@ void fs_read(const v8::FunctionCallbackInfo<v8::Value>& args) {
     const int offset = args[3]->Int32Value();
 
     v8::Local<v8::ArrayBuffer> arr = v8::Local<v8::ArrayBuffer>::Cast(args[2]);
+
+    // TODO I think we need to make our own array buffers and pass them to the user
+    // array buffers cannot be externalized more than once
+    // and I don't see how we can store the contents to reuse safely
+    // we could use one of the array buffers internal fields
+    // however....if any other bindings decide to do so as well
+    // then they would be in their right and could step on our field
+    // this is not a safe solution since the array buffer is everyone's to create
     v8::ArrayBuffer::Contents buf = arr->Externalize();
+
+    // alternative!
+    // we allow user to create buffer via buf_init
+    // they pass this buffer to us
+    // we then callback... fuck.. no won't work for sync version
 
     // TODO persistent for arr
     // we need to attach ourselves to the ArrayBuffer

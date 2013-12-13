@@ -12,7 +12,7 @@ PREFIX ?= /usr/local
 V ?= 1
 
 all: out/Makefile
-	$(MAKE) -C out BUILDTYPE=Debug V=$(V)
+	$(MAKE) -C out BUILDTYPE=Release V=$(V)
 
 test: all
 	cd test && ../out/Debug/uvjs --expose-gc index.js

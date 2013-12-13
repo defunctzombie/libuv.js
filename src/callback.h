@@ -30,15 +30,45 @@ public:
         handle.Reset(v8::Isolate::GetCurrent(), v8::Local<v8::Function>::Cast(fn));
     }
 
-    bool IsEmpty() {
+    inline bool IsEmpty() {
         return handle.IsEmpty();
+    }
+
+    template <class TypeName>
+    static inline v8::Local<TypeName> PersistentToLocal(
+            v8::Isolate* isolate,
+            const v8::Persistent<TypeName>& persistent) {
+        if (persistent.IsWeak()) {
+            return v8::Local<TypeName>::New(isolate, persistent);
+        }
+        return *reinterpret_cast<v8::Local<TypeName>*>(
+                const_cast<v8::Persistent<TypeName>*>(&persistent));
+    }
+
+    void Call() {
+        v8::Isolate* isolate = v8::Isolate::GetCurrent();
+        v8::HandleScope scope(isolate);
+
+        //v8::Local<v8::Function> fn = v8::Local<v8::Function>::New(isolate, handle);
+        v8::Local<v8::Function> fn = PersistentToLocal(isolate, handle);
+
+        v8::TryCatch try_catch;
+        try_catch.SetVerbose(true);
+
+        v8::Local<v8::Value> argv[] = {};
+        fn->Call(v8::Context::GetCurrent()->Global(), 0, argv);
+
+        if (try_catch.HasCaught()) {
+            isolate->ThrowException(try_catch.Exception());
+        }
     }
 
     void Call(int argc, v8::Local<v8::Value> argv[]) {
         v8::Isolate* isolate = v8::Isolate::GetCurrent();
         v8::HandleScope scope(isolate);
 
-        v8::Local<v8::Function> fn = v8::Local<v8::Function>::New(isolate, handle);
+        //v8::Local<v8::Function> fn = v8::Local<v8::Function>::New(isolate, handle);
+        v8::Local<v8::Function> fn = PersistentToLocal(isolate, handle);
 
         v8::TryCatch try_catch;
         try_catch.SetVerbose(true);

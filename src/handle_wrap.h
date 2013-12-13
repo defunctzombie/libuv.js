@@ -60,7 +60,7 @@ public:
             this->Ref();
         }
 
-        uv_close(_handle, After_close);
+        uv_close(reinterpret_cast<uv_handle_t*>(_handle), After_close);
     }
 
 

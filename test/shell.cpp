@@ -1,14 +1,16 @@
 #include <assert.h>
+#include <limits.h>
 #include <fcntl.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string>
 #include <v8.h>
 #include <uv.h>
 
 #include "uvjs.h"
 
-v8::Handle<v8::Context> CreateShellContext(v8::Isolate* isolate);
+v8::Handle<v8::Context> CreateShellContext(v8::Isolate* isolate, int argc, char* argv[]);
 void RunShell(v8::Handle<v8::Context> context);
 int RunMain(v8::Isolate* isolate, int argc, char* argv[]);
 bool ExecuteString(v8::Isolate* isolate,
@@ -60,12 +62,28 @@ int main(int argc, char* argv[]) {
   int result;
   {
     v8::HandleScope handle_scope(isolate);
-    v8::Handle<v8::Context> context = CreateShellContext(isolate);
+    v8::Handle<v8::Context> context = CreateShellContext(isolate, argc, argv);
+
     if (context.IsEmpty()) {
       fprintf(stderr, "Error creating context\n");
       return 1;
     }
     context->Enter();
+
+    v8::Local<v8::Array> names = v8::Array::New(argc);
+    for (int i = 0; i < argc; ++i) {
+      v8::Local<v8::String> name = v8::String::NewFromUtf8(isolate, argv[i]);
+      names->Set(i, name);
+    }
+    context->Global()->Set(v8::String::New("argv"), names);
+
+    char cwd[PATH_MAX];
+    assert(uv_cwd(cwd, PATH_MAX) == 0);
+    context->Global()->Set(v8::String::New("cwd"), v8::String::NewFromUtf8(isolate, cwd));
+
+    // run the bootstrap script
+    // the bootstrap script should parse the args and do what else is needed
+    // avoids having to parse crazy arg shit in c
 
     result = RunMain(isolate, argc, argv);
     if (run_shell) RunShell(context);
@@ -87,7 +105,7 @@ const char* ToCString(const v8::String::Utf8Value& value) {
 
 // Creates a new execution environment containing the built-in
 // functions.
-v8::Handle<v8::Context> CreateShellContext(v8::Isolate* isolate) {
+v8::Handle<v8::Context> CreateShellContext(v8::Isolate* isolate, int argc, char* argv[]) {
   // Create a template for the global object.
   v8::Handle<v8::ObjectTemplate> global = v8::ObjectTemplate::New();
 
@@ -164,6 +182,16 @@ void RunInThisContext(const v8::FunctionCallbackInfo<v8::Value>& args) {
 
     v8::TryCatch try_catch;
 
+    if (args.Length() == 3) {
+      v8::Handle<v8::ObjectTemplate> tmpl = v8::ObjectTemplate::New();
+      v8::Local<v8::Object> obj = v8::Local<v8::Object>::Cast(args[2]);
+      tmpl->Set(v8::String::New("global"), obj);
+      tmpl->Set(v8::String::New("print"), v8::FunctionTemplate::New(Print));
+
+      v8::Handle<v8::Context> ctx = v8::Context::New(args.GetIsolate(), NULL, tmpl);
+      ctx->Enter();
+    }
+
     v8::Handle<v8::Script> script = v8::Script::Compile(args[0]->ToString(), args[1]);
 
     v8::Handle<v8::Value> result = script->Run();
@@ -182,19 +210,18 @@ void RunInThisContext(const v8::FunctionCallbackInfo<v8::Value>& args) {
 // function is called.  Loads, compiles and executes its argument
 // JavaScript file.
 void Load(const v8::FunctionCallbackInfo<v8::Value>& args) {
+    v8::Isolate* isolate = args.GetIsolate();
+    v8::HandleScope handle_scope(isolate);
 
-    v8::HandleScope handle_scope(args.GetIsolate());
     v8::String::Utf8Value file(args[0]);
     if (*file == NULL) {
-      args.GetIsolate()->ThrowException(
-          v8::String::New("Error loading file"));
+      isolate->ThrowException(v8::String::New("Specify a file to load"));
       return;
     }
 
     v8::Handle<v8::String> source = ReadFile(*file);
     if (source.IsEmpty()) {
-      args.GetIsolate()->ThrowException(
-           v8::String::New("Error loading file"));
+      isolate->ThrowException(v8::String::New("Error loading file"));
       return;
     }
 
@@ -261,6 +288,15 @@ int RunMain(v8::Isolate* isolate, int argc, char* argv[]) {
     const char* str = argv[i];
     if (strcmp(str, "--shell") == 0) {
       run_shell = true;
+    } else if (strcmp(str, "--bootstrap") == 0 && i + 1 < argc) {
+      const char* file = argv[++i];
+      v8::Handle<v8::String> source = ReadFile(file);
+      v8::Handle<v8::String> file_name = v8::String::New(str);
+      if (source.IsEmpty()) {
+        fprintf(stderr, "Error reading '%s'\n", str);
+        continue;
+      }
+      if (!ExecuteString(isolate, source, file_name, false, true)) return 1;
     } else if (strcmp(str, "-f") == 0) {
       // Ignore any -f flags for compatibility with the other stand-
       // alone JavaScript engines.
@@ -274,14 +310,31 @@ int RunMain(v8::Isolate* isolate, int argc, char* argv[]) {
       v8::Handle<v8::String> source = v8::String::New(argv[++i]);
       if (!ExecuteString(isolate, source, file_name, false, true)) return 1;
     } else {
+#if 0
       // Use all other arguments as names of files to load and run.
       v8::Handle<v8::String> file_name = v8::String::New(str);
+      printf("filename %s\n", str);
+
+      // resolve dir
+      // or.. expose cwd to script
+      // and also expose script to execute name
+      // with these two we can determine the script path
+      // we need to load bootstrap outselves
+      //
+      // specify path to bootstrap file
+      // bootstrap file will be run first
+      // then when it is done
+      // the main script will be run?
+      // or build bootstrap with prog
+      // bootstrap will be run and given the script to execute?
+
       v8::Handle<v8::String> source = ReadFile(str);
       if (source.IsEmpty()) {
         fprintf(stderr, "Error reading '%s'\n", str);
         continue;
       }
       if (!ExecuteString(isolate, source, file_name, false, true)) return 1;
+#endif
     }
   }
   return 0;
