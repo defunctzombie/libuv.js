@@ -2,6 +2,10 @@ var uv = require('uv');
 
 var assert = require('../support/assert');
 var StringView = require('../support/StringView');
+var TextEncoder = require('./encoding').TextEncoder;
+
+var encoder = new TextEncoder('utf-8');
+var buf = encoder.encode('hello world!').buffer;
 
 var tcp_handle = uv.tcp_init(uv.default_loop());
 
@@ -16,7 +20,7 @@ var err = tcp_handle.listen(0, function(server, status) {
 
     // will accept the connection
     // and makes a new handle for it
-    var client = server.accept();
+    var client = tcp_handle.accept();
 
     //print(">accepted");
 
@@ -37,8 +41,7 @@ var err = tcp_handle.listen(0, function(server, status) {
         //var str = new StringView(data);
         //print('got:', str);
 
-        client.write([data], function() {
-            print('server wrote back');
+        client.write(data, function() {
         });
     });
     assert(err == 0); // success starting read
@@ -62,16 +65,12 @@ ping_handle.connect({ address: '127.0.0.1', port: 8080, family: 'IPv4'}, functio
         count++;
         //assert(str == 'hello world!');
 
-        var buf = strToUTF8Arr('hello world!').buffer;
-        var err = ping_handle.write([buf], function() {
-            print('written');
+        var err = ping_handle.write(buf, function() {
         });
 
     });
 
-    var buf = strToUTF8Arr('hello world!').buffer;
-    var err = ping_handle.write([buf], function() {
-        print('written');
+    var err = ping_handle.write(buf, function() {
     });
 
     var timer = uv.timer_init(uv.default_loop());
@@ -83,60 +82,3 @@ ping_handle.connect({ address: '127.0.0.1', port: 8080, family: 'IPv4'}, functio
 });
 
 uv.run(uv.default_loop(), uv.UV_RUN_DEFAULT);
-
-function strToUTF8Arr (sDOMStr) {
-
-    var aBytes, nChr, nStrLen = sDOMStr.length, nArrLen = 0;
-
-    /* mapping... */
-
-    for (var nMapIdx = 0; nMapIdx < nStrLen; nMapIdx++) {
-        nChr = sDOMStr.charCodeAt(nMapIdx);
-        nArrLen += nChr < 0x80 ? 1 : nChr < 0x800 ? 2 : nChr < 0x10000 ? 3 : nChr < 0x200000 ? 4 : nChr < 0x4000000 ? 5 : 6;
-    }
-
-    aBytes = new Uint8Array(nArrLen);
-
-    /* transcription... */
-
-    for (var nIdx = 0, nChrIdx = 0; nIdx < nArrLen; nChrIdx++) {
-        nChr = sDOMStr.charCodeAt(nChrIdx);
-        if (nChr < 128) {
-            /* one byte */
-            aBytes[nIdx++] = nChr;
-        } else if (nChr < 0x800) {
-            /* two bytes */
-            aBytes[nIdx++] = 192 + (nChr >>> 6);
-            aBytes[nIdx++] = 128 + (nChr & 63);
-        } else if (nChr < 0x10000) {
-            /* three bytes */
-            aBytes[nIdx++] = 224 + (nChr >>> 12);
-            aBytes[nIdx++] = 128 + (nChr >>> 6 & 63);
-            aBytes[nIdx++] = 128 + (nChr & 63);
-        } else if (nChr < 0x200000) {
-            /* four bytes */
-            aBytes[nIdx++] = 240 + (nChr >>> 18);
-            aBytes[nIdx++] = 128 + (nChr >>> 12 & 63);
-            aBytes[nIdx++] = 128 + (nChr >>> 6 & 63);
-            aBytes[nIdx++] = 128 + (nChr & 63);
-        } else if (nChr < 0x4000000) {
-            /* five bytes */
-            aBytes[nIdx++] = 248 + (nChr >>> 24);
-            aBytes[nIdx++] = 128 + (nChr >>> 18 & 63);
-            aBytes[nIdx++] = 128 + (nChr >>> 12 & 63);
-            aBytes[nIdx++] = 128 + (nChr >>> 6 & 63);
-            aBytes[nIdx++] = 128 + (nChr & 63);
-        } else /* if (nChr <= 0x7fffffff) */ {
-            /* six bytes */
-            aBytes[nIdx++] = 252 + /* (nChr >>> 32) is not possible in ECMAScript! So...: */ (nChr / 1073741824);
-            aBytes[nIdx++] = 128 + (nChr >>> 24 & 63);
-            aBytes[nIdx++] = 128 + (nChr >>> 18 & 63);
-            aBytes[nIdx++] = 128 + (nChr >>> 12 & 63);
-            aBytes[nIdx++] = 128 + (nChr >>> 6 & 63);
-            aBytes[nIdx++] = 128 + (nChr & 63);
-        }
-    }
-
-    return aBytes;
-
-}
