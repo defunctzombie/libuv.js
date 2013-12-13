@@ -80,10 +80,6 @@ int main(int argc, char* argv[]) {
     assert(uv_cwd(cwd, PATH_MAX) == 0);
     context->Global()->Set(v8::String::New("cwd"), v8::String::NewFromUtf8(isolate, cwd));
 
-    // run the bootstrap script
-    // the bootstrap script should parse the args and do what else is needed
-    // avoids having to parse crazy arg shit in c
-
     result = RunMain(isolate, argc, argv);
     if (run_shell) RunShell(context);
 
@@ -102,35 +98,21 @@ const char* ToCString(const v8::String::Utf8Value& value) {
   return *value ? *value : "<string conversion failed>";
 }
 
-// Creates a new execution environment containing the built-in
-// functions.
+// Creates a new execution environment containing the built-in functions.
 v8::Handle<v8::Context> CreateShellContext(v8::Isolate* isolate, int argc, char* argv[]) {
-  // Create a template for the global object.
   v8::Handle<v8::ObjectTemplate> global = v8::ObjectTemplate::New();
 
-  // Bind the global 'print' function to the C++ Print callback.
   global->Set(v8::String::New("print"), v8::FunctionTemplate::New(Print));
-
-  // read a file
   global->Set(v8::String::New("read"), v8::FunctionTemplate::New(Read));
-
-  // run the js source and return the result
   global->Set(v8::String::New("run"), v8::FunctionTemplate::New(RunInThisContext));
-
-  // reading the Load file should happen relative to entry point file
-
   global->Set(v8::String::New("quit"), v8::FunctionTemplate::New(Quit));
 
-  // expose uv into global namespace so we can test with it
+  // expose uv into global namespace
   global->Set(v8::String::New("__uv_bindings"), uvjs::New());
 
   return v8::Context::New(isolate, NULL, global);
 }
 
-
-// The callback that is invoked by v8 whenever the JavaScript 'print'
-// function is called.  Prints its arguments on stdout separated by
-// spaces and ending with a newline.
 void Print(const v8::FunctionCallbackInfo<v8::Value>& args) {
   bool first = true;
   for (int i = 0; i < args.Length(); i++) {
@@ -149,9 +131,6 @@ void Print(const v8::FunctionCallbackInfo<v8::Value>& args) {
 }
 
 
-// The callback that is invoked by v8 whenever the JavaScript 'read'
-// function is called.  This function loads the content of the file named in
-// the argument into a JavaScript string.
 void Read(const v8::FunctionCallbackInfo<v8::Value>& args) {
   if (args.Length() != 1) {
     args.GetIsolate()->ThrowException(
@@ -202,9 +181,8 @@ void RunInThisContext(const v8::FunctionCallbackInfo<v8::Value>& args) {
     args.GetReturnValue().Set(result);
 }
 
-// The callback that is invoked by v8 whenever the JavaScript 'quit'
-// function is called.  Quits.
 void Quit(const v8::FunctionCallbackInfo<v8::Value>& args) {
+  assert(args.Length() == 1);
   // If not arguments are given args[0] will yield undefined which
   // converts to the integer value 0.
   int exit_code = args[0]->Int32Value();
