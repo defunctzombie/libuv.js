@@ -21,7 +21,6 @@ bool ExecuteString(v8::Isolate* isolate,
 void Print(const v8::FunctionCallbackInfo<v8::Value>& args);
 void Read(const v8::FunctionCallbackInfo<v8::Value>& args);
 void RunInThisContext(const v8::FunctionCallbackInfo<v8::Value>& args);
-void Load(const v8::FunctionCallbackInfo<v8::Value>& args);
 void Quit(const v8::FunctionCallbackInfo<v8::Value>& args);
 
 v8::Handle<v8::String> ReadFile(const char* name);
@@ -115,9 +114,6 @@ v8::Handle<v8::Context> CreateShellContext(v8::Isolate* isolate, int argc, char*
   // read a file
   global->Set(v8::String::New("read"), v8::FunctionTemplate::New(Read));
 
-  // load and run the source
-  global->Set(v8::String::New("load"), v8::FunctionTemplate::New(Load));
-
   // run the js source and return the result
   global->Set(v8::String::New("run"), v8::FunctionTemplate::New(RunInThisContext));
 
@@ -206,48 +202,6 @@ void RunInThisContext(const v8::FunctionCallbackInfo<v8::Value>& args) {
     args.GetReturnValue().Set(result);
 }
 
-// The callback that is invoked by v8 whenever the JavaScript 'load'
-// function is called.  Loads, compiles and executes its argument
-// JavaScript file.
-void Load(const v8::FunctionCallbackInfo<v8::Value>& args) {
-    v8::Isolate* isolate = args.GetIsolate();
-    v8::HandleScope handle_scope(isolate);
-
-    v8::String::Utf8Value file(args[0]);
-    if (*file == NULL) {
-      isolate->ThrowException(v8::String::New("Specify a file to load"));
-      return;
-    }
-
-    v8::Handle<v8::String> source = ReadFile(*file);
-    if (source.IsEmpty()) {
-      isolate->ThrowException(v8::String::New("Error loading file"));
-      return;
-    }
-
-  v8::TryCatch try_catch;
-
-  v8::Handle<v8::Script> script = v8::Script::Compile(source, args[0]);
-
-  if (script.IsEmpty()) {
-    // Print errors that happened during compilation.
-    ReportException(args.GetIsolate(), &try_catch);
-    return;
-  }
-
-  v8::Handle<v8::Value> result = script->Run();
-  if (result.IsEmpty()) {
-    assert(try_catch.HasCaught());
-    // Print errors that happened during execution.
-    ReportException(args.GetIsolate(), &try_catch);
-    return;
-  }
-
-  assert(!try_catch.HasCaught());
-  args.GetReturnValue().Set(result);
-}
-
-
 // The callback that is invoked by v8 whenever the JavaScript 'quit'
 // function is called.  Quits.
 void Quit(const v8::FunctionCallbackInfo<v8::Value>& args) {
@@ -309,32 +263,6 @@ int RunMain(v8::Isolate* isolate, int argc, char* argv[]) {
       v8::Handle<v8::String> file_name = v8::String::New("unnamed");
       v8::Handle<v8::String> source = v8::String::New(argv[++i]);
       if (!ExecuteString(isolate, source, file_name, false, true)) return 1;
-    } else {
-#if 0
-      // Use all other arguments as names of files to load and run.
-      v8::Handle<v8::String> file_name = v8::String::New(str);
-      printf("filename %s\n", str);
-
-      // resolve dir
-      // or.. expose cwd to script
-      // and also expose script to execute name
-      // with these two we can determine the script path
-      // we need to load bootstrap outselves
-      //
-      // specify path to bootstrap file
-      // bootstrap file will be run first
-      // then when it is done
-      // the main script will be run?
-      // or build bootstrap with prog
-      // bootstrap will be run and given the script to execute?
-
-      v8::Handle<v8::String> source = ReadFile(str);
-      if (source.IsEmpty()) {
-        fprintf(stderr, "Error reading '%s'\n", str);
-        continue;
-      }
-      if (!ExecuteString(isolate, source, file_name, false, true)) return 1;
-#endif
     }
   }
   return 0;
