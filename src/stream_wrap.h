@@ -56,7 +56,7 @@ public:
         assert(buf->base);
         StreamWrap<uv_stream_t>* wrap = static_cast<StreamWrap<uv_stream_t> *>(stream->data);
 
-        // eof, buffer should be freed
+        // eof, buffer should be freed, will not be used
         if (nread == UV_EOF) {
             uvjs::detail::allocator->Free(buf->base, buf->len);
 
@@ -67,7 +67,7 @@ public:
 
             return;
         }
-        // read error, buffer should be freed
+        // read error, buffer should be freed, will not be used
         else if (nread < 0) {
             uvjs::detail::allocator->Free(buf->base, buf->len);
 
