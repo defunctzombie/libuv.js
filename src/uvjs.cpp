@@ -3,7 +3,7 @@
 #include "uvjs.h"
 #include "uvjs_misc.h"
 #include "uvjs_loop.h"
-#include "uvjs_stream.h"
+#include "uvjs_tcp.h"
 #include "uvjs_tty.h"
 #include "uvjs_timer.h"
 #include "uvjs_fs.h"
