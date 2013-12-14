@@ -4,6 +4,7 @@
 #include "uvjs_misc.h"
 #include "uvjs_loop.h"
 #include "uvjs_stream.h"
+#include "uvjs_tty.h"
 #include "uvjs_timer.h"
 #include "uvjs_fs.h"
 
@@ -38,6 +39,7 @@ v8::Handle<v8::ObjectTemplate> New() {
 
     // streams
     PROP(tcp_init);
+    PROP(tty_init);
 
     // fs
     PROP(fs_open);
