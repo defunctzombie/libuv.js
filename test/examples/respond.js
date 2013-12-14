@@ -8,7 +8,7 @@ var tcp_handle = uv.tcp_init(uv.default_loop());
 tcp_handle.bind({
     port: 9012,
     family: 'IPv4',
-    address: '0.0.0.0'
+    address: '127.0.0.1'
 });
 
 var encoder = new TextEncoder('utf-8');

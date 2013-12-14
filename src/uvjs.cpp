@@ -8,7 +8,13 @@
 #include "uvjs_timer.h"
 #include "uvjs_fs.h"
 
+#include "internal.h"
+
 namespace uvjs {
+
+void SetArrayBufferAllocator(uvjs::ArrayBufferAllocator* allocator) {
+    uvjs::detail::allocator = allocator;
+}
 
 v8::Handle<v8::ObjectTemplate> New() {
 

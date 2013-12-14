@@ -6,74 +6,7 @@
 
 #include "handle_wrap.h"
 #include "callback.h"
-
-// interface to externalize an array buffer
-// it is your job to keep the array buffer alive for as long as you need
-
-class Baton {
-public:
-    Baton(v8::Local<v8::ArrayBuffer>& ab, void* data)
-        : _data(data) {
-        _array_buffer.Reset(v8::Isolate::GetCurrent(), ab);
-        _array_buffer.SetWeak(this, WeakCallback);
-    }
-
-    ~Baton() {
-        assert(_data);
-        free(_data);
-        _data = NULL;
-    }
-
-    void* data() {
-        return _data;
-    }
-
-private:
-
-    static void WeakCallback(const v8::WeakCallbackData<v8::ArrayBuffer, Baton>& data) {
-        v8::HandleScope scope(data.GetIsolate());
-
-        Baton* baton = data.GetParameter();
-        baton->_array_buffer.ClearWeak();
-        baton->_array_buffer.Reset();
-        data.GetValue()->SetAlignedPointerInInternalField(0, NULL);
-        delete baton;
-    }
-
-    void* _data;
-    v8::Persistent<v8::ArrayBuffer> _array_buffer;
-};
-
-void* Externalized(v8::Local<v8::ArrayBuffer>& buffer) {
-
-    static int kExternalField;
-
-    // buffer was already externalized
-    if (buffer->IsExternal()) {
-        Baton* baton = static_cast<Baton*>(buffer->GetAlignedPointerFromInternalField(kExternalField));
-        return baton->data();
-    }
-
-    v8::ArrayBuffer::Contents contents = buffer->Externalize();
-
-    Baton* baton = new Baton(buffer, contents.Data());
-    buffer->SetAlignedPointerInInternalField(kExternalField, baton);
-
-    return baton->data();
-}
-
-v8::Local<v8::ArrayBuffer> Externalize(void* buf, size_t bytes) {
-    v8::HandleScope scope(v8::Isolate::GetCurrent());
-
-    v8::Local<v8::ArrayBuffer> arr = v8::ArrayBuffer::New(buf, bytes);
-
-    Baton* baton = new Baton(arr, buf);
-    arr->SetAlignedPointerInInternalField(0, baton);
-
-    return scope.Close(arr);
-}
-
-// interface to get contents of externalized buffer
+#include "internal.h"
 
 namespace uvjs {
 namespace detail {
@@ -109,7 +42,8 @@ public:
 
     static void Alloc_Cb(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf) {
         // create an array buffer on the newly allocated data
-        buf->base = static_cast<char*>(malloc(suggested_size));
+        buf->base = static_cast<char*>(uvjs::detail::allocator->
+                AllocateUninitialized(suggested_size));
         buf->len = suggested_size;
 
         assert(buf->base);
@@ -124,7 +58,7 @@ public:
 
         // eof, buffer should be freed
         if (nread == UV_EOF) {
-            free(buf->base);
+            uvjs::detail::allocator->Free(buf->base, buf->len);
 
             // callback with null for data to indicate to user EOF
             const int argc = 2;
@@ -135,7 +69,7 @@ public:
         }
         // read error, buffer should be freed
         else if (nread < 0) {
-            free(buf->base);
+            uvjs::detail::allocator->Free(buf->base, buf->len);
 
             v8::Local<v8::Value> err = v8::Exception::Error(v8::String::New("read error"));
 
@@ -145,7 +79,8 @@ public:
             return;
         }
 
-        v8::Local<v8::ArrayBuffer> arr = Externalize(buf->base, nread);
+        assert(uvjs::detail::allocator);
+        v8::Local<v8::ArrayBuffer> arr = uvjs::detail::allocator->Externalize(buf->base, nread);
 
         const int argc = 2;
         v8::Local<v8::Value> argv[argc] = { v8::Undefined() , arr };
@@ -238,7 +173,9 @@ void StreamWrap<T>::Stream_Write(const v8::FunctionCallbackInfo<v8::Value>& args
     uv_buf_t bufs[num_bufs];
 
     v8::Local<v8::ArrayBuffer> ab = v8::Local<v8::ArrayBuffer>::Cast(args[0]);
-    bufs[0].base = static_cast<char*>(Externalized(ab));
+
+    assert(uvjs::detail::allocator);
+    bufs[0].base = static_cast<char*>(uvjs::detail::allocator->Externalized(ab));
     bufs[0].len = ab->ByteLength();
 
     WriteReq* write_req = new WriteReq(wrap, ab);
