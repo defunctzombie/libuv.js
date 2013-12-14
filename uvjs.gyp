@@ -39,7 +39,7 @@
 
       'sources': [
         'common.gypi',
-        'test/shell.cpp'
+        'test/shell/main.cpp'
       ],
 
       'defines': [
