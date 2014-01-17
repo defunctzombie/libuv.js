@@ -6,6 +6,7 @@ require('./misc');
 require('./timer');
 require('./fs');
 require('./stream');
+require('./tcp');
 
 // launch our loop, without this some tests won't run
 var loop = uv.default_loop();
