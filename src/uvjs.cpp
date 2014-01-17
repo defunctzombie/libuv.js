@@ -7,6 +7,7 @@
 #include "uvjs_tty.h"
 #include "uvjs_timer.h"
 #include "uvjs_fs.h"
+//#include "uvjs_process.h"
 
 #include "internal.h"
 
@@ -47,6 +48,9 @@ v8::Handle<v8::ObjectTemplate> New() {
     PROP(tcp_init);
     PROP(tty_init);
 
+    // process
+    //PROP(spawn);
+
     // fs
     PROP(fs_open);
     PROP(fs_close);
@@ -64,6 +68,21 @@ v8::Handle<v8::ObjectTemplate> New() {
 
     ENUM(UV_LEAVE_GROUP);
     ENUM(UV_JOIN_GROUP);
+
+    // process
+    ENUM(UV_PROCESS_SETUID);
+    ENUM(UV_PROCESS_SETGID);
+    ENUM(UV_PROCESS_WINDOWS_VERBATIM_ARGUMENTS);
+    ENUM(UV_PROCESS_DETACHED);
+    ENUM(UV_PROCESS_WINDOWS_HIDE);
+
+    // stdio
+    ENUM(UV_IGNORE);
+    ENUM(UV_CREATE_PIPE);
+    ENUM(UV_INHERIT_FD);
+    ENUM(UV_INHERIT_STREAM);
+    ENUM(UV_READABLE_PIPE);
+    ENUM(UV_WRITABLE_PIPE);
 
 #undef ENUM
 

@@ -34,7 +34,7 @@ function mode_num(mode) {
 test('fs_open - ENOENT', function(done) {
     done = after(2, done);
 
-    test_fs_fn(uv.fs_open, default_loop, './support/fs/foo2.txt', 0, mode_num('0666'), function(err, fd) {
+    test_fs_fn(uv.fs_open, default_loop, './test/support/fs/foo2.txt', 0, mode_num('0666'), function(err, fd) {
         assert(err);
         assert(err.code === 'ENOENT');
         assert(err.message === 'ENOENT, no such file or directory');
@@ -43,7 +43,7 @@ test('fs_open - ENOENT', function(done) {
 });
 
 test('fs_open - success - sync', function() {
-    var fd = uv.fs_open(default_loop, './support/fs/foo.txt', 0, mode_num('0666'), null);
+    var fd = uv.fs_open(default_loop, './test/support/fs/foo.txt', 0, mode_num('0666'), null);
     assert(fd > 0, 'fd > 0');
 
     var res = uv.fs_close(default_loop, fd, null);
@@ -51,7 +51,7 @@ test('fs_open - success - sync', function() {
 });
 
 test('fs_open - success - async', function(done) {
-    var res = uv.fs_open(default_loop, './support/fs/foo.txt', 0, mode_num('0666'), function(err, fd) {
+    var res = uv.fs_open(default_loop, './test/support/fs/foo.txt', 0, mode_num('0666'), function(err, fd) {
         assert.ifError(err);
         assert(fd > 0, 'fd > 0');
 
@@ -77,7 +77,7 @@ test('fs_close - fail sync', function() {
 test('fs_read', function() {
     var buf = new ArrayBuffer(1024);
 
-    var fd = uv.fs_open(default_loop, './support/fs/foo.txt', 0, mode_num('0666'), null);
+    var fd = uv.fs_open(default_loop, './test/support/fs/foo.txt', 0, mode_num('0666'), null);
 
     var len = uv.fs_read(default_loop, fd, buf, 0, null);
     assert(len === 10, 'should have read 10 bytes'); // 'some text\n'
@@ -91,7 +91,7 @@ test('fs_read', function() {
 test('fs_readdir', function(done) {
     done = after(2, done);
 
-    test_fs_fn(uv.fs_readdir, default_loop, './support/fs', 0, function(err, dirs) {
+    test_fs_fn(uv.fs_readdir, default_loop, './test/support/fs', 0, function(err, dirs) {
         assert.ifError(err);
 
         assert(dirs.length === 2, '2 files in support dir');

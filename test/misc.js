@@ -1,3 +1,4 @@
+var test = require('./support/test');
 var assert = require('./support/assert');
 var uv = require('./support/uv');
 

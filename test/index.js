@@ -1,6 +1,3 @@
-// bootstrap a module system onto the global
-load('./support/bootstrap.js');
-
 var test = require('./support/test');
 var assert = require('./support/assert');
 var uv = require('./support/uv');
