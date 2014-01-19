@@ -1,5 +1,4 @@
-script: "make test"
+language: cpp
+
 before_install:
     - git submodule update --init --recursive
-    - ./configure
-    - make
